@@ -1,5 +1,10 @@
 {
-  "next_index": 0,
-  "pushed_total": 0,
-  "history": {}
+  "next_index": 2,
+  "pushed_total": 2,
+  "history": {
+    "2026-11-11": [
+      1,
+      2
+    ]
+  }
 }

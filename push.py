@@ -4,9 +4,15 @@
 不依赖任何大模型：所有讲解内容已预先生成在 data/poems.json 里，
 这里只负责「按日期挑诗 → 拼成正文 → 发邮件 → 记进度」。
 
+节奏：
+    周一至周五 08:00  每天 2 首；只剩 1 首的那天就推 1 首
+    周六       08:00  本周（周一至周五）学过的做成总结卡片
+    周日              不推送
+    75 首全部推完后自动终止，不再发信
+
 用法：
-    python3 push.py                 # 日常：周一至周五推 2 首
-    python3 push.py --mode summary  # 周总结：本周学过的做成卡片
+    python3 push.py                 # 日常
+    python3 push.py --mode summary  # 周总结
     python3 push.py --date 2026-11-12 --dry-run
 
 环境变量（GitHub Actions 里用 Secrets 注入）：
@@ -71,19 +77,27 @@ def poem_block(p, mark=""):
 
 def daily_body(today, picks, by_no, state, total):
     cn = WEEKDAY_CN[today.weekday()]
+    done = state["pushed_total"] >= total
     parts = [f"今日古诗 · {today.month}月{today.day}日 {cn}", ""]
-    for mark, no in zip(("① ", "② "), picks):
-        parts.append(poem_block(by_no[no], mark))
+    marks = ("① ", "② ")
+    for i, no in enumerate(picks):
+        parts.append(poem_block(by_no[no], marks[i] if len(picks) > 1 else ""))
         parts.append("")
-    parts.append(f"—— 已学 {state['pushed_total']}/{total} 首 · 下一个工作日 10:00 继续 ——")
-    parts.append("背法：先听读正音 3 遍 → 逐句说意思 → 合上书连背 3 遍；第二天先默写名句，再学新的。")
+    if done:
+        parts.append(f"—— 已学 {state['pushed_total']}/{total} 首　·　75 首全部推完，到此结束 ——")
+        parts.append("")
+        parts.append("恭喜走完一轮。之后想再背一遍，把仓库里的 state.json 重置即可（说明见 README）。")
+    else:
+        parts.append(f"—— 已学 {state['pushed_total']}/{total} 首　·　明天 8:00 继续 ——")
+        parts.append("")
+        parts.append("背法：先听读正音 3 遍 → 逐句说意思 → 合上书连背 3 遍；第二天先默写名句，再学新的。")
     return "\n".join(parts)
 
 
-def summary_body(today, week_nos, by_no, state, total):
+def summary_body(today, week_nos, by_no, state, total, finished):
     if not week_nos:
         return "本周没有推送记录。"
-    lines = [f"本周总结 · {today.month}月{today.day}日 周五（本周 {len(week_nos)} 首）", ""]
+    lines = [f"本周总结 · {today.month}月{today.day}日 周六（本周 {len(week_nos)} 首）", ""]
     for i, no in enumerate(week_nos, 1):
         p = by_no[no]
         wrong = p["recite"].split("；")[0].rstrip("。")
@@ -99,6 +113,7 @@ def summary_body(today, week_nos, by_no, state, total):
     if stat:
         lines.append(f"本周共 {len(week_nos)} 首：{stat}。")
     pair = None
+    pair_theme = ""
     for t, c in themes.items():
         if t and c >= 2:
             pair = [no for no in week_nos if by_no[no].get("theme") == t][:2]
@@ -112,8 +127,11 @@ def summary_body(today, week_nos, by_no, state, total):
         lines.append("把同题材的几首放在一起比一比：写景诗看哪个字把景写活了，送别诗看结尾落在“情”还是“景”上。")
     lines += ["", "【周末自测】", "1. 挑一首本周的诗，说出它的名句。",
               "2. 从本周的【背诵】提示里找出 3 个易错字，默写一遍。",
-              "3. 选两首同题材的诗，说说它们写同一件事的角度有什么不同。",
-              "", f"—— 本周进度 {state['pushed_total']}/{total} · 周六周日休息，下周一 10:00 继续 ——"]
+              "3. 选两首同题材的诗，说说它们写同一件事的角度有什么不同。", ""]
+    if finished:
+        lines.append(f"—— 75 首全部推完 · 感谢这一个多月的坚持 ——")
+    else:
+        lines.append(f"—— 本周进度 {state['pushed_total']}/{total} · 周日休息，下周一 8:00 继续 ——")
     return "\n".join(lines)
 
 
@@ -166,29 +184,45 @@ def main():
     today = date.fromisoformat(args.date) if args.date else datetime.now(CST).date()
     key = today.isoformat()
     iso = today.isocalendar()[:2]
+    finished = bool(state.get("finished"))
+    finished_on = state.get("finished_on")
 
     if args.mode == "summary":
+        # 任务结束后，只在收尾那一周再发一次总结，之后彻底停
+        if finished and finished_on:
+            if date.fromisoformat(finished_on).isocalendar()[:2] != iso:
+                print("75 首已全部推完，任务已结束，不再推送。")
+                return
         week = []
         for d, nos in sorted(state["history"].items()):
             dd = date.fromisoformat(d)
             if dd.isocalendar()[:2] == iso and dd.weekday() < 5:
                 week.extend(nos)
-        body = summary_body(today, week, by_no, state, total)
-        subject = f"【本周总结】古诗 · {today.month}月{today.day}日 周五 · 本周 {len(week)} 首"
+        body = summary_body(today, week, by_no, state, total, finished)
+        subject = f"【本周总结】古诗 · {today.month}月{today.day}日 周六 · 本周 {len(week)} 首"
     else:
+        if finished or state["pushed_total"] >= total:
+            print("75 首已全部推完，任务结束，不再推送。")
+            return
         if today.weekday() >= 5:
             print(f"今天是{WEEKDAY_CN[today.weekday()]}，按设置不推送。")
             return
         if key in state["history"]:
             picks = state["history"][key]
         else:
+            remaining = total - state["pushed_total"]
+            n = min(2, remaining)
             start = state["next_index"] % total
-            picks = [((start + i) % total) + 1 for i in range(2)]
-            state["next_index"] = (start + 2) % total
-            state["pushed_total"] += 2
+            picks = [((start + i) % total) + 1 for i in range(n)]
+            state["next_index"] = (start + n) % total
+            state["pushed_total"] += n
             state["history"][key] = picks
-            for d in sorted(state["history"])[:-90]:
+            for d in sorted(state["history"])[:-120]:
                 state["history"].pop(d, None)
+            if state["pushed_total"] >= total:
+                state["finished"] = True
+                state["finished_on"] = key
+                finished = True
         titles = "".join(f"《{by_no[n]['title']}》" for n in picks)
         body = daily_body(today, picks, by_no, state, total)
         subject = f"今日古诗 · {today.month}月{today.day}日 {WEEKDAY_CN[today.weekday()]} · {titles}"

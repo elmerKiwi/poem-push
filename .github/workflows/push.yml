@@ -2,9 +2,9 @@ name: 古诗推送
 
 on:
   schedule:
-    # GitHub 的 cron 用 UTC。北京 10:00 = UTC 02:00，北京 18:00 = UTC 10:00
-    - cron: '0 2 * * 1-5'    # 周一至周五 10:00（北京）
-    - cron: '0 10 * * 5'     # 每周五 18:00（北京）
+    # GitHub 的 cron 用 UTC。北京 08:00 = UTC 00:00
+    - cron: '0 0 * * 1-5'    # 周一至周五 08:00（北京）推 2 首
+    - cron: '0 0 * * 6'      # 周六 08:00（北京）推本周总结
   workflow_dispatch:
     inputs:
       mode:
@@ -33,7 +33,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             MODE="${{ github.event.inputs.mode }}"
-          elif [ "${{ github.event.schedule }}" = "0 10 * * 5" ]; then
+          elif [ "${{ github.event.schedule }}" = "0 0 * * 6" ]; then
             MODE="summary"
           else
             MODE="daily"

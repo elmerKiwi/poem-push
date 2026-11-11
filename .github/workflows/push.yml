@@ -1,0 +1,54 @@
+name: 古诗推送
+
+on:
+  schedule:
+    # GitHub 的 cron 用 UTC。北京 10:00 = UTC 02:00，北京 18:00 = UTC 10:00
+    - cron: '0 2 * * 1-5'    # 周一至周五 10:00（北京）
+    - cron: '0 10 * * 5'     # 每周五 18:00（北京）
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'daily 或 summary'
+        required: false
+        default: 'daily'
+
+permissions:
+  contents: write
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 发送推送
+        env:
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          elif [ "${{ github.event.schedule }}" = "0 10 * * 5" ]; then
+            MODE="summary"
+          else
+            MODE="daily"
+          fi
+          echo "mode=$MODE"
+          python push.py --mode "$MODE"
+
+      - name: 保存进度
+        run: |
+          if git diff --quiet state.json; then
+            echo "进度无变化"
+            exit 0
+          fi
+          git config user.name "poem-bot"
+          git config user.email "poem-bot@users.noreply.github.com"
+          git add state.json
+          git commit -m "chore: 更新推送进度 $(date -u +%F)"
+          git push

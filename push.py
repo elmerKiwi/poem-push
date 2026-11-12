@@ -171,6 +171,7 @@ def main():
     ap.add_argument("--mode", choices=["daily", "summary"], default="daily")
     ap.add_argument("--date", help="YYYY-MM-DD，默认北京时间今天")
     ap.add_argument("--dry-run", action="store_true", help="只打印，不发信、不写状态")
+    ap.add_argument("--force", action="store_true", help="当天已推送过时，强制再发一次")
     args = ap.parse_args()
 
     data = load_json(DATA_FILE, {"poems": [], "total": 0})
@@ -193,6 +194,9 @@ def main():
             if date.fromisoformat(finished_on).isocalendar()[:2] != iso:
                 print("75 首已全部推完，任务已结束，不再推送。")
                 return
+        if state.get("last_summary") == key and not args.force:
+            print("本周总结已经发过（重复触发），跳过，不重复发信。")
+            return
         week = []
         for d, nos in sorted(state["history"].items()):
             dd = date.fromisoformat(d)
@@ -206,6 +210,9 @@ def main():
             return
         if today.weekday() >= 5:
             print(f"今天是{WEEKDAY_CN[today.weekday()]}，按设置不推送。")
+            return
+        if key in state["history"] and not args.force:
+            print("今天已经推送过（重复触发），跳过，不重复发信。")
             return
         if key in state["history"]:
             picks = state["history"][key]
@@ -231,6 +238,8 @@ def main():
         print(body)
         return
 
+    if args.mode == "summary":
+        state["last_summary"] = key
     sent = send_mail(subject, body)
     if not sent and os.environ.get("CI"):
         print("未配置邮件参数，仅输出内容。")

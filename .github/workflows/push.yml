@@ -4,7 +4,9 @@ on:
   schedule:
     # GitHub 的 cron 用 UTC。北京 08:00 = UTC 00:00
     - cron: '0 0 * * 1-5'    # 周一至周五 08:00（北京）推 2 首
+    - cron: '30 0 * * 1-5'   # 08:30 兜底：首个任务被 GitHub 跳过时补发
     - cron: '0 0 * * 6'      # 周六 08:00（北京）推本周总结
+    - cron: '30 0 * * 6'     # 周六 08:30 兜底
   workflow_dispatch:
     inputs:
       mode:
@@ -31,9 +33,10 @@ jobs:
           MAIL_PASS: ${{ secrets.MAIL_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
+          SCHEDULE="${{ github.event.schedule }}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             MODE="${{ github.event.inputs.mode }}"
-          elif [ "${{ github.event.schedule }}" = "0 0 * * 6" ]; then
+          elif [[ "$SCHEDULE" == *"* 6" ]]; then
             MODE="summary"
           else
             MODE="daily"

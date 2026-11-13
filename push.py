@@ -101,9 +101,13 @@ def summary_body(today, week_nos, by_no, state, total, finished):
     for i, no in enumerate(week_nos, 1):
         p = by_no[no]
         wrong = p["recite"].split("；")[0].rstrip("。")
-        if len(wrong) > 22:
-            wrong = wrong[:22] + "…"
-        lines.append(f"{i}. 《{p['title']}》　{p['author']}　名句：{p['famous']}　易错：{wrong}")
+        if len(wrong) > 60:
+            wrong = wrong[:60] + "…"
+        lines.append(f"{i}. 《{p['title']}》　{p['author']}·{p['dynasty']}")
+        for ln in p["text"].split("\n"):
+            lines.append("　　" + ln)
+        lines.append(f"　　· 名句：{p['famous']}　易错：{wrong}")
+        lines.append("")
     lines += ["", "【本周串讲】"]
     themes = {}
     for no in week_nos:

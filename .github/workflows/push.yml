@@ -18,6 +18,10 @@ on:
         description: 'daily 或 summary'
         required: false
         default: 'daily'
+      force:
+        description: '填 true 可跳过"今天已发过"的去重，强制再发一次'
+        required: false
+        default: 'false'
 
 permissions:
   contents: write
@@ -46,8 +50,12 @@ jobs:
           else
             MODE="daily"
           fi
-          echo "mode=$MODE"
-          python push.py --mode "$MODE"
+          echo "mode=$MODE force=${{ github.event.inputs.force }}"
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python push.py --mode "$MODE" --force
+          else
+            python push.py --mode "$MODE"
+          fi
 
       - name: 保存进度
         run: |
